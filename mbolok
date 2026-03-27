@@ -1,0 +1,125 @@
+#include "MeMCore.h"
+
+MeDCMotor motorLeft(M1);
+MeDCMotor motorRight(M2);
+MeUltrasonicSensor sonar(PORT_3);
+MeLineFollower line(PORT_2);
+MeIR ir;
+MeBuzzer buzzer;
+
+int mode = 0;
+int lastDirection = 1;
+uint8_t baseSpeed = 100;
+
+void setup() {
+Serial.begin(115200);
+ir.begin();
+}
+
+void drive(int left, int right) {
+motorLeft.run(-left);
+motorRight.run(right);
+}
+
+void stopMotors() {
+drive(0, 0);
+}
+
+void beep() {
+buzzer.tone(500, 200);
+}
+
+void avoidObstacle() {
+stopMotors();
+delay(200);
+
+drive(150, -150);
+delay(500);
+
+drive(150, 150);
+delay(1000);
+
+drive(-150, 150);
+delay(500);
+
+drive(150, 150);
+delay(1500);
+
+drive(-150, 150);
+delay(500);
+
+while(line.readSensors() == 3) {
+drive(100, 100);
+}
+stopMotors();
+}
+
+void autoMode() {
+int dist = sonar.distanceCm();
+if (dist > 0 && dist < 15) {
+avoidObstacle();
+return;
+}
+
+int sensorState = line.readSensors();
+
+if (sensorState == 0) {
+drive(baseSpeed, baseSpeed);
+lastDirection = 1;
+} else if (sensorState == 1) {
+drive(-baseSpeed, baseSpeed);
+lastDirection = -1;
+} else if (sensorState == 2) {
+drive(baseSpeed, -baseSpeed);
+lastDirection = 1;
+} else if (sensorState == 3) {
+if (lastDirection == 1) {
+drive(baseSpeed, -baseSpeed);
+} else {
+drive(-baseSpeed, baseSpeed);
+}
+}
+}
+
+void manualMode(char command) {
+if (command == 'F') drive(baseSpeed, baseSpeed);
+if (command == 'B') {
+drive(-baseSpeed, -baseSpeed);
+beep();
+}
+if (command == 'L') drive(-baseSpeed, baseSpeed);
+if (command == 'R') drive(baseSpeed, -baseSpeed);
+if (command == 'S') stopMotors();
+}
+
+void loop() {
+  char cmd = 0;
+  
+  if (Serial.available()) {
+    cmd = Serial.read();
+  }
+  
+  ir.loop();
+  int irCode = ir.getCode();
+  
+  if (irCode == 69) cmd = 'A';
+  if (irCode == 70) cmd = 'M';
+  if (irCode == 64) cmd = 'F';
+  if (irCode == 25) cmd = 'B';
+  if (irCode == 7)  cmd = 'L';
+  if (irCode == 9)  cmd = 'R';
+  if (irCode == 21) cmd = 'S';
+
+if (cmd == 'A') {
+mode = 1;
+} else if (cmd == 'M') {
+mode = 0;
+stopMotors();
+}
+
+if (mode == 1) {
+autoMode();
+} else if (mode == 0 && cmd > 0) {
+manualMode(cmd);
+}
+}
